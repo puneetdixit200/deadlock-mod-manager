@@ -140,6 +140,20 @@ impl ProfileVpkManifest {
     }
   }
 
+  pub fn mark_vpks_disabled(
+    &mut self,
+    mod_id: &str,
+    disabled_vpks: Vec<String>,
+    original_vpk_names: Vec<String>,
+  ) {
+    let entry = self.mods.entry(mod_id.to_string()).or_default();
+    entry.current_vpks.clear();
+    entry.disabled_vpks = disabled_vpks;
+    if !original_vpk_names.is_empty() {
+      entry.original_vpk_names = original_vpk_names;
+    }
+  }
+
   pub fn mark_disabled(
     &mut self,
     mod_id: &str,
@@ -259,5 +273,36 @@ mod tests {
     assert_eq!(entry.original_vpk_names, vec!["cool_mod.vpk".to_string()]);
     assert_eq!(entry.current_vpks, vec!["pak02_dir.vpk".to_string()]);
     assert_eq!(entry.order, Some(1));
+  }
+
+  #[test]
+  fn mark_vpks_disabled_preserves_active_config_state() {
+    let mut manifest = ProfileVpkManifest::default();
+    manifest.mark_enabled(
+      "123",
+      vec!["pak01_dir.vpk".to_string()],
+      vec!["cool_mod.vpk".to_string()],
+      vec!["autoexec.cfg".to_string()],
+      vec!["autoexec.cfg".to_string()],
+      Some(7),
+    );
+
+    manifest.mark_vpks_disabled(
+      "123",
+      vec!["123_cool_mod.vpk".to_string()],
+      vec!["cool_mod.vpk".to_string()],
+    );
+
+    let entry = manifest.mods.get("123").unwrap();
+    assert!(entry.enabled);
+    assert!(entry.current_vpks.is_empty());
+    assert_eq!(entry.disabled_vpks, vec!["123_cool_mod.vpk".to_string()]);
+    assert_eq!(entry.current_config_files, vec!["autoexec.cfg".to_string()]);
+    assert!(entry.disabled_config_files.is_empty());
+    assert_eq!(
+      entry.original_config_file_paths,
+      vec!["autoexec.cfg".to_string()]
+    );
+    assert_eq!(entry.order, Some(7));
   }
 }

@@ -263,6 +263,16 @@ impl ModManager {
       staged_config_files.len()
     );
 
+    let original_vpk_names: Vec<String> = prefixed_vpks
+      .iter()
+      .map(|name| {
+        name
+          .strip_prefix(&format!("{}_", deadlock_mod.id))
+          .unwrap_or(name)
+          .to_string()
+      })
+      .collect();
+
     let installed_vpks = if prefixed_vpks.is_empty() {
       Vec::new()
     } else {
@@ -274,24 +284,38 @@ impl ModManager {
     let installed_config_files = if staged_config_files.is_empty() {
       Vec::new()
     } else {
-      self.config_mod_manager.enable_config_files(
+      match self.config_mod_manager.enable_config_files(
         &cfg_path,
         &deadlock_mod.id,
         &staged_config_files,
-      )?
+      ) {
+        Ok(files) => files,
+        Err(error) => {
+          if !installed_vpks.is_empty() {
+            if let Err(rollback_error) = self.vpk_manager.disable_vpks(
+              &addons_path,
+              &deadlock_mod.id,
+              &installed_vpks,
+              &original_vpk_names,
+            ) {
+              return Err(Error::RollbackFailed(format!(
+                "Failed to enable config files: {error}. Also failed to roll back enabled VPK files: {rollback_error}"
+              )));
+            }
+            log::info!(
+              "Rolled back {} enabled VPKs after config enable failed",
+              installed_vpks.len()
+            );
+          }
+
+          return Err(error);
+        }
+      }
     };
 
     deadlock_mod.installed_vpks = installed_vpks;
     deadlock_mod.installed_config_files = installed_config_files;
-    deadlock_mod.original_vpk_names = prefixed_vpks
-      .iter()
-      .map(|name| {
-        name
-          .strip_prefix(&format!("{}_", deadlock_mod.id))
-          .unwrap_or(name)
-          .to_string()
-      })
-      .collect();
+    deadlock_mod.original_vpk_names = original_vpk_names;
     deadlock_mod.original_config_file_paths = staged_config_files.clone();
 
     if deadlock_mod.file_tree.is_none()
@@ -380,6 +404,17 @@ impl ModManager {
           entry.current_vpks.clone(),
           if entry.original_vpk_names.is_empty() {
             entry.current_vpks.clone()
+          } else {
+            entry.original_vpk_names.clone()
+          },
+        )
+      }
+      Some(entry) if !entry.disabled_vpks.is_empty() && !entry.current_config_files.is_empty() => {
+        log::info!("VPKs are already disabled for {mod_id}, continuing config disable");
+        (
+          Vec::new(),
+          if entry.original_vpk_names.is_empty() {
+            entry.disabled_vpks.clone()
           } else {
             entry.original_vpk_names.clone()
           },
@@ -485,6 +520,21 @@ impl ModManager {
         .vpk_manager
         .disable_vpks(&addons_path, &mod_id, &installed_vpks, &original_vpk_names)?
     };
+
+    let disabled_vpks = if prefixed_vpks.is_empty() {
+      manifest_entry
+        .as_ref()
+        .map(|entry| entry.disabled_vpks.clone())
+        .unwrap_or_default()
+    } else {
+      prefixed_vpks.clone()
+    };
+
+    if !prefixed_vpks.is_empty() && !installed_config_files.is_empty() {
+      manifest.mark_vpks_disabled(&mod_id, prefixed_vpks.clone(), original_vpk_names.clone());
+      manifest.save(&addons_path)?;
+    }
+
     let disabled_config_files = if installed_config_files.is_empty() {
       Vec::new()
     } else {
@@ -495,7 +545,7 @@ impl ModManager {
 
     manifest.mark_disabled(
       &mod_id,
-      prefixed_vpks.clone(),
+      disabled_vpks.clone(),
       original_vpk_names,
       disabled_config_files.clone(),
       original_config_file_paths,
@@ -510,7 +560,7 @@ impl ModManager {
 
     log::info!(
       "Disabled mod {mod_id} with {} prefixed VPKs and {} staged config files",
-      prefixed_vpks.len(),
+      disabled_vpks.len(),
       disabled_config_files.len()
     );
 

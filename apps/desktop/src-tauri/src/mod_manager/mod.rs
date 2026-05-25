@@ -7,6 +7,7 @@ pub mod console_log_watcher;
 pub mod file_tree;
 pub mod filesystem_helper;
 pub mod font_manager;
+pub mod fs_retry;
 pub mod game_config_manager;
 pub mod game_process_manager;
 pub mod manager;

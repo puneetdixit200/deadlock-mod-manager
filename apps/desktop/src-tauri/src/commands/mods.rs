@@ -6,7 +6,7 @@ use crate::mod_manager::Mod;
 use crate::mod_manager::archive_extractor::ArchiveExtractor;
 use crate::mod_manager::file_tree::{ModFile, ModFileKind, ModFileTree};
 use crate::mod_manager::filesystem_helper::FileSystemHelper;
-use crate::mod_manager::vpk_manager::VpkManager;
+use crate::mod_manager::vpk_manager::{MissingVpkPolicy, VpkManager};
 use crate::mod_manager::vpk_manifest::ProfileVpkManifest;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
@@ -1317,6 +1317,7 @@ pub async fn switch_mod_download_variant(
       &mod_id,
       &current_installed_vpks,
       &current_original_names,
+      MissingVpkPolicy::Strict,
     )?;
   }
 

@@ -10,7 +10,7 @@ use crate::mod_manager::{
   game_process_manager::GameProcessManager,
   mod_repository::{Mod, ModRepository},
   steam_manager::SteamManager,
-  vpk_manager::VpkManager,
+  vpk_manager::{MissingVpkPolicy, VpkManager},
   vpk_manifest::ProfileVpkManifest,
 };
 use log;
@@ -297,6 +297,7 @@ impl ModManager {
               &deadlock_mod.id,
               &installed_vpks,
               &original_vpk_names,
+              MissingVpkPolicy::Reconcile,
             ) {
               return Err(Error::RollbackFailed(format!(
                 "Failed to enable config files: {error}. Also failed to roll back enabled VPK files: {rollback_error}"
@@ -516,9 +517,13 @@ impl ModManager {
     let prefixed_vpks = if installed_vpks.is_empty() {
       Vec::new()
     } else {
-      self
-        .vpk_manager
-        .disable_vpks(&addons_path, &mod_id, &installed_vpks, &original_vpk_names)?
+      self.vpk_manager.disable_vpks(
+        &addons_path,
+        &mod_id,
+        &installed_vpks,
+        &original_vpk_names,
+        MissingVpkPolicy::Reconcile,
+      )?
     };
 
     let disabled_vpks = if prefixed_vpks.is_empty() {
